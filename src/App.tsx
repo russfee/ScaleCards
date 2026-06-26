@@ -1,5 +1,19 @@
-import { useMemo, useState } from "react";
-import { Eye, EyeOff, Guitar, ListMusic, RefreshCw, RotateCcw, Settings2, Shuffle, Target } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Guitar,
+  History,
+  ListMusic,
+  RefreshCw,
+  RotateCcw,
+  Settings2,
+  Shuffle,
+  Target,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 import {
   CHALLENGES,
   NOTE_NAMES,
@@ -7,7 +21,6 @@ import {
   SCALE_DEFINITIONS,
   ScaleDefinition,
   getFretboardNotes,
-  getRandomItem,
   getScaleNotes,
 } from "./scales";
 
@@ -17,15 +30,87 @@ type PracticeCard = {
   challenge: string;
 };
 
+type PracticeResult = "correct" | "wrong";
+
+type CardStats = {
+  correct: number;
+  wrong: number;
+};
+
+type PracticeStats = Record<string, CardStats>;
+
 const DEFAULT_SCALE_IDS = ["minor-pentatonic", "major-pentatonic", "major", "natural-minor"];
 const FRET_OPTIONS = [12, 15, 17, 21];
+const PRACTICE_STATS_STORAGE_KEY = "scale-cards-practice-stats";
 
-function createPracticeCard(enabledScales: ScaleDefinition[]): PracticeCard {
-  return {
-    root: getRandomItem(NOTE_NAMES),
-    scale: getRandomItem(enabledScales),
-    challenge: getRandomItem(CHALLENGES),
-  };
+function getCardKey(card: PracticeCard) {
+  return `${card.root}:${card.scale.id}:${card.challenge}`;
+}
+
+function getCardWeight(card: PracticeCard, stats: PracticeStats) {
+  const cardStats = stats[getCardKey(card)];
+
+  if (!cardStats) {
+    return 1;
+  }
+
+  const missGap = Math.max(0, cardStats.wrong - cardStats.correct);
+  return 1 + cardStats.wrong * 3 + missGap * 2;
+}
+
+function getWeightedRandomCard(cards: PracticeCard[], stats: PracticeStats) {
+  const totalWeight = cards.reduce((total, card) => total + getCardWeight(card, stats), 0);
+  let cursor = Math.random() * totalWeight;
+
+  for (const card of cards) {
+    cursor -= getCardWeight(card, stats);
+
+    if (cursor <= 0) {
+      return card;
+    }
+  }
+
+  return cards[cards.length - 1];
+}
+
+function getPracticeCards(enabledScales: ScaleDefinition[]) {
+  return enabledScales.flatMap((scale) =>
+    NOTE_NAMES.flatMap((root) =>
+      CHALLENGES.map((challenge) => ({
+        root,
+        scale,
+        challenge,
+      })),
+    ),
+  );
+}
+
+function loadPracticeStats(): PracticeStats {
+  try {
+    const storedStats = window.localStorage.getItem(PRACTICE_STATS_STORAGE_KEY);
+
+    if (!storedStats) {
+      return {};
+    }
+
+    return JSON.parse(storedStats) as PracticeStats;
+  } catch {
+    return {};
+  }
+}
+
+function countPracticeAttempts(stats: PracticeStats) {
+  return Object.values(stats).reduce(
+    (totals, cardStats) => ({
+      correct: totals.correct + cardStats.correct,
+      wrong: totals.wrong + cardStats.wrong,
+    }),
+    { correct: 0, wrong: 0 },
+  );
+}
+
+function createWeightedPracticeCard(enabledScales: ScaleDefinition[], stats: PracticeStats): PracticeCard {
+  return getWeightedRandomCard(getPracticeCards(enabledScales), stats);
 }
 
 export default function App() {
@@ -34,8 +119,10 @@ export default function App() {
   const [showAnswer, setShowAnswer] = useState(false);
   const [showNoteNames, setShowNoteNames] = useState(true);
   const [showOnlyScaleNotes, setShowOnlyScaleNotes] = useState(true);
+  const [practiceStats, setPracticeStats] = useState<PracticeStats>(() => loadPracticeStats());
+  const [lastResult, setLastResult] = useState<PracticeResult | null>(null);
   const [card, setCard] = useState<PracticeCard>(() =>
-    createPracticeCard(SCALE_DEFINITIONS.filter((scale) => DEFAULT_SCALE_IDS.includes(scale.id))),
+    createWeightedPracticeCard(SCALE_DEFINITIONS.filter((scale) => DEFAULT_SCALE_IDS.includes(scale.id)), loadPracticeStats()),
   );
 
   const enabledScales = useMemo(() => {
@@ -45,10 +132,38 @@ export default function App() {
 
   const scaleNotes = useMemo(() => getScaleNotes(card.root, card.scale), [card]);
   const fretboardRows = useMemo(() => getFretboardNotes(card.root, card.scale, maxFret), [card, maxFret]);
+  const currentCardStats = practiceStats[getCardKey(card)] ?? { correct: 0, wrong: 0 };
+  const sessionTotals = useMemo(() => countPracticeAttempts(practiceStats), [practiceStats]);
+
+  useEffect(() => {
+    window.localStorage.setItem(PRACTICE_STATS_STORAGE_KEY, JSON.stringify(practiceStats));
+  }, [practiceStats]);
 
   const nextCard = () => {
-    setCard(createPracticeCard(enabledScales));
+    setCard(createWeightedPracticeCard(enabledScales, practiceStats));
     setShowAnswer(false);
+    setLastResult(null);
+  };
+
+  const recordResult = (result: PracticeResult) => {
+    const cardKey = getCardKey(card);
+    const nextStats = {
+      ...practiceStats,
+      [cardKey]: {
+        correct: currentCardStats.correct + (result === "correct" ? 1 : 0),
+        wrong: currentCardStats.wrong + (result === "wrong" ? 1 : 0),
+      },
+    };
+
+    setPracticeStats(nextStats);
+    setCard(createWeightedPracticeCard(enabledScales, nextStats));
+    setShowAnswer(false);
+    setLastResult(result);
+  };
+
+  const resetPracticeStats = () => {
+    setPracticeStats({});
+    setLastResult(null);
   };
 
   const resetStarterScales = () => {
@@ -143,6 +258,17 @@ export default function App() {
               showNoteNames={showNoteNames}
               showOnlyScaleNotes={showOnlyScaleNotes}
             />
+
+            <div className="result-actions" aria-label="Mark result">
+              <button className="success-button" type="button" onClick={() => recordResult("correct")}>
+                <CheckCircle2 size={18} />
+                Got it
+              </button>
+              <button className="danger-button" type="button" onClick={() => recordResult("wrong")}>
+                <XCircle size={18} />
+                Missed it
+              </button>
+            </div>
           </section>
         </section>
 
@@ -219,14 +345,30 @@ export default function App() {
 
           <section className="tool-panel compact">
             <div className="panel-heading">
-              <Target size={18} />
-              <h2>Session</h2>
+              <History size={18} />
+              <h2>Memory</h2>
             </div>
             <div className="session-stats">
               <span>{enabledScales.length} scales active</span>
               <span>{maxFret + 1} fret positions</span>
-              <span>Standard tuning</span>
+              <span>{sessionTotals.correct} right answers</span>
+              <span>{sessionTotals.wrong} missed answers</span>
+              <span>
+                Current card: {currentCardStats.correct} right / {currentCardStats.wrong} missed
+              </span>
             </div>
+            <div className={lastResult ? `result-feedback ${lastResult}` : "result-feedback"} aria-live="polite">
+              {lastResult === "correct" ? "Saved. Nice one." : lastResult === "wrong" ? "Saved. This card will come back more often." : ""}
+            </div>
+            <button
+              className="ghost-button reset-memory-button"
+              type="button"
+              onClick={resetPracticeStats}
+              disabled={!sessionTotals.correct && !sessionTotals.wrong}
+            >
+              <Trash2 size={18} />
+              Reset memory
+            </button>
           </section>
         </aside>
       </section>

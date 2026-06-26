@@ -75,6 +75,7 @@ h2 {
 .panel-heading,
 .panel-heading > span,
 .practice-actions,
+.result-actions,
 .challenge-strip,
 .answer-head {
   display: flex;
@@ -112,6 +113,8 @@ h2 {
 
 .primary-button,
 .secondary-button,
+.success-button,
+.danger-button,
 .ghost-button,
 .icon-button,
 .text-button {
@@ -125,6 +128,8 @@ h2 {
 
 .primary-button,
 .secondary-button,
+.success-button,
+.danger-button,
 .ghost-button {
   gap: 8px;
   padding: 0 16px;
@@ -140,6 +145,18 @@ h2 {
   color: #fff;
   background: #244f64;
   border: 1px solid #244f64;
+}
+
+.success-button {
+  color: #fff;
+  background: #2f866f;
+  border: 1px solid #2f866f;
+}
+
+.danger-button {
+  color: #fff;
+  background: #b84535;
+  border: 1px solid #b84535;
 }
 
 .ghost-button,
@@ -260,6 +277,13 @@ h2 {
 .practice-actions {
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.result-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 2px;
 }
 
 .answer-panel {
@@ -499,6 +523,25 @@ h2 {
   line-height: 1.5;
 }
 
+.result-feedback {
+  min-height: 22px;
+  color: #66757c;
+  font-size: 0.86rem;
+  font-weight: 850;
+}
+
+.result-feedback.correct {
+  color: #2b715f;
+}
+
+.result-feedback.wrong {
+  color: #9b3b2f;
+}
+
+.reset-memory-button {
+  width: 100%;
+}
+
 @media (max-width: 1080px) {
   .workbench {
     grid-template-columns: 1fr;
@@ -529,7 +572,9 @@ h2 {
   }
 
   .topbar-actions,
-  .secondary-button {
+  .secondary-button,
+  .success-button,
+  .danger-button {
     width: 100%;
   }
 
@@ -572,7 +617,9 @@ h2 {
   }
 
   .ghost-button,
-  .secondary-button {
+  .secondary-button,
+  .success-button,
+  .danger-button {
     width: 100%;
   }
 }
